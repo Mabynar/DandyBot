@@ -1,7 +1,8 @@
 import sys
 import time
 import json
-sys.path.insert(0, './game')
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__),'game'))
 from pathlib import Path
 from game import Game, Player
 from threading import Thread
@@ -10,7 +11,7 @@ BOT_TILE = 2128
 PLAYER_TILE = 2138
 CHUNK = 1024
 TICKRATE = 75
-CHALLENGES = Path('./game/challenges')
+CHALLENGES = Path(os.path.join(os.path.dirname(__file__),'game/challenges'))
 
 class Connection:
     def __init__(self, reader, writer):

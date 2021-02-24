@@ -1,13 +1,14 @@
 import sys
+import os
 import json
 import asyncio
 from pathlib import Path
 from random import shuffle
 from importlib import import_module, reload
 
-sys.path.insert(0, './bots')
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir,'bots'))
 
-MAPS_DIR = Path("./game/maps")
+MAPS_DIR = Path(os.path.join(os.path.dirname(__file__), "game/maps"))
 
 UP = "up"
 DOWN = "down"

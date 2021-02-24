@@ -1,10 +1,11 @@
 import sys
 import time
+import os
 import asyncio
 from game import Game, LocalPlayer
 from importlib import import_module, reload
 
-sys.path.insert(0, './bots')
+sys.path.append(os.path.join(os.path.dirname(__file__),'bots'))
 
 class Singleplayer:
     def __init__(self, challenge, board, user_bot, user_tile, tick_rate):

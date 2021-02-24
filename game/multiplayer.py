@@ -1,4 +1,5 @@
 import sys
+import os
 import json
 import signal
 import asyncio
@@ -9,7 +10,7 @@ from threading import Thread
 from game import Game
 from importlib import import_module, reload
 
-sys.path.insert(0, './bots')
+sys.path.append(os.path.join(os.path.dirname(__file__),'bots'))
 
 class Multiplayer:
     def __init__(self, board, server, port, username):

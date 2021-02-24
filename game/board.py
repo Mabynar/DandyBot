@@ -1,10 +1,10 @@
-
+import os
 import json
 from pathlib import Path
 import tkinter as tk
 from plitk import PliTk
 
-DEFAULT_TILES = json.loads(Path("./game/data/default_tiles.json").read_text())
+DEFAULT_TILES = json.loads(Path(os.path.join(os.path.dirname(__file__), "data/default_tiles.json")).read_text())
 DEFAULT_SCALE = 1
 
 class Board:

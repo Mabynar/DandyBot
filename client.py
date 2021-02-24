@@ -1,21 +1,22 @@
 import sys
 import json
 import traceback
+import os
 from pathlib import Path
 import tkinter as tk
 import tkinter.filedialog
-sys.path.insert(0, './game')
+sys.path.append(os.path.join(os.path.dirname(__file__),'game'))
 from plitk import PliTk
 from board import Board
 from singleplayer import Singleplayer
 from multiplayer import Multiplayer
 
-DATA_DIR = Path("./game/data")
-CHALLENGES = Path("./game/challenges")
-DEFAULT_SETTINGS = Path("./default_settings.json")
-SETTINGS = Path("./settings.json")
-LAST_BOT = Path(".lastbot")
-LAST_TILE = Path(".lasttile")
+DATA_DIR = Path(os.path.join(os.path.dirname(__file__),"game/data"))
+CHALLENGES = Path(os.path.join(os.path.dirname(__file__),"game/challenges"))
+DEFAULT_SETTINGS = Path(os.path.join(os.path.dirname(__file__),"default_settings.json"))
+SETTINGS = Path(os.path.join(os.path.dirname(__file__),"settings.json"))
+LAST_BOT = Path(os.path.join(os.path.dirname(__file__),"lastbot"))
+LAST_TILE = Path(os.path.join(os.path.dirname(__file__),"lasttile"))
 
 SETTINGS_IN_MENU = { # dict of settings_name: label_text
     "tickrate": "tick, ms",
@@ -96,7 +97,7 @@ class Client:
         root.mainloop()
 
     def init_level(self):
-        map = json.loads(Path("./game/maps/starter_screen.json").read_text())
+        map = json.loads(Path(os.path.join(os.path.dirname(__file__),"game/maps/starter_screen.json")).read_text())
         self.board.load(map)
 
     def change_bot(self):
@@ -113,7 +114,7 @@ class Client:
             initialdir=CHALLENGES, filetypes=[("json files", "*.json")])
         if not chal_file: return
         chal = Path(chal_file)
-        self.settings["challenge"] = chal.file
+        self.settings["challenge"] = chal_file
         self.save_settings(0)
         label["text"] = f"Chal: {chal.stem}"
         label["fg"] = "gray60"
