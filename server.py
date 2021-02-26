@@ -4,74 +4,18 @@ import json
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__),'game'))
 from pathlib import Path
-from game import Game, Player
+from game import LocalGame
+from Players import RemotePlayer
 from threading import Thread
+from Constants import *
 import asyncio
-BOT_TILE = 2128
+
 PLAYER_TILE = 2138
-CHUNK = 1024
 TICKRATE = 75
 CHALLENGES = Path(os.path.join(os.path.dirname(__file__),'game/challenges'))
 
-class Connection:
-    def __init__(self, reader, writer):
-        self.reader = reader
-        self.writer = writer
 
-    async def communicate(self, command, object=None, await_resp=True):
-        message = command + ("" if object is None else (" " + json.dumps(object))) + "\n"
-        self.writer.write(message.encode())
-        await self.writer.drain()
-        #print("sent: "+message)
-        resp = await self.reader.read(CHUNK)
-        resp = resp.decode()
-        if not object is None and resp == "ok" or not await_resp:
-            return True
-        try:
-            return json.loads(resp)
-        except:
-            await self.send_status("400")
-            raise Exception("Failed to communicate: "+command)
-
-    async def send_status(self, message):
-        self.writer.write(message.encode() + b'\n')
-        await self.writer.drain()
-
-    def close(self):
-        self.writer.close()
-
-class RemotePlayer(Player, Connection):
-    def __init__(self, game, reader, writer):
-        Connection.__init__(self, reader, writer)
-        self.username = None
-        self.server_game = game # idk python inheritance too hard for me
-
-    async def connect(self):
-        data = await self.communicate("player "+self.server_game.name)
-        username = data.get("name")
-        bot_name = data.get("bot")
-        bot_tile = data.get("tile")
-        if not username or not bot_name or not bot_tile:
-            await self.send_status("400")
-            raise Exception("Bad player data")
-        self.username = str(username)
-        Player.__init__(self, self.server_game, str(bot_name), int(bot_tile))
-        await self.send_status("200")
-        await self.communicate("map", self.game.get_map())
-
-    async def do_action(self):
-        map, players = self.game.fetch()
-        state = {
-            "x": self.x, "y": self.y,
-            "grid": map,
-            "players": players,
-            "level": self.game.level_index}
-        await self.communicate("state", state)
-        res = await self.communicate("action")
-        self.act(res["action"])
-
-
-class ServerGame(Game):
+class ServerGame(LocalGame):
     def __init__(self, name, challenge, tick_rate):
         super().__init__(challenge)
         self.name = name
@@ -82,7 +26,7 @@ class ServerGame(Game):
         #asyncio.set_event_loop(self.loop)
 
     async def connect_player(self, reader, writer):
-        player = RemotePlayer(self, reader, writer)
+        player = RemotePlayer.RemotePlayer(self, reader, writer)
         await player.connect()
         self.remote_players.append(player)
         self.load_player(player)

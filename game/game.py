@@ -1,79 +1,30 @@
-import sys
-import os
 import json
+from random import shuffle
 import random
 import asyncio
-from pathlib import Path
-from random import shuffle
-from importlib import import_module, reload
+from importlib import import_module
+from Players import LocalPlayer
+from Constants import *
 
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir,'bots'))
-
-MAPS_DIR = Path(os.path.join(os.path.dirname(__file__), "game/maps"))
-
-UP = "up"
-DOWN = "down"
-LEFT = "left"
-RIGHT = "right"
-TAKE = "take"
-PASS = "pass"
-
-LEVEL = "level"
-PORTAL = "portal"
-KEY = "key"
-DOOR = "door"
-PLAYER = "player"
-GOLD = "gold"
-WALL = "wall"
-EMPTY = "empty"
-
-BOT_TILE = 2128
-
-class Game:
-    def __init__(self, challenge, load=True):
-        self.challenge = challenge
-        self.level_index = 0
+class BaseGame:
+    def __init__(self):
         self.players = []
-        if load: self.load_level()
-        # load challenge bots
-        for bot in (challenge.get("bots") or []):
-            print("load bot: "+bot)
-            try:
-                script = import_module(bot).script
-            except:
-                raise Exception(f"Failed to load bot: {bot}")
-            else:
-                tile = challenge["tiles"][name] if "tiles" in challenge and name in challenge["tiles"] else BOT_TILE
-                self.load_player(LocalPlayer(self, bot, tile, script))
+        self.level_index = 0
+        self.level = []
+        self.map_title = "Map"
+        self.map_tiles = None
+        self.steps = 0
 
-    def load_player(self, player):
+    def load_player(self, player, x, y):
         self.players.append(player)
-        self.add_player(player, *self.level["start"])
+        self.add_player(player, x, y)
         shuffle(self.players)
 
-    def load_level(self):
-        self.level = self.challenge["levels"][self.level_index]
-        name = self.level["map"]
-        if type(name) is str: # map from separate file
-            # TODO: handle map loading error
-            fname = name if name.endswith(".json") else name + ".json"
-            map = json.loads(MAPS_DIR.joinpath(fname))
-            data = map["grid"]
-            self.map_title = map["title"]
-            self.map_tiles = map.get("tiles")
-        else: # map from chal file
-            data = self.challenge["maps"][name]
-            self.map_title = str(name + 1)
-            self.map_tiles = None
-
-        self.gold = 0
-        self.key = 0
+    def load_level(self, tiles):
         self.steps = 0
-        self.cols, self.rows = cols, rows = len(data[0]), len(data)
-        self.map = [[data[y][x] for x in range(cols)] for y in range(rows)]
+        self.cols, self.rows = cols, rows = len(tiles[0]), len(tiles)
+        self.map = [[tiles[y][x] for x in range(cols)] for y in range(rows)]
         self.has_player = [[None for y in range(rows)] for x in range(cols)]
-        for p in self.players:
-            self.add_player(p, *self.level["start"])
 
     def get(self, x, y):
         if x < 0 or y < 0 or x >= self.cols or y >= self.rows:
@@ -87,8 +38,7 @@ class Game:
         player.x, player.y = x, y
         self.has_player[x][y] = player
 
-    def take_gold(self, x, y):
-        self.gold += self.check(GOLD, x, y)
+    def take_item(self, x, y):
         self.map[y][x] = " "
 
     def check(self, cmd, *args):
@@ -110,31 +60,10 @@ class Game:
             return item == "D"
         return cmd == EMPTY
 
-    # absolutely cursed method ikr
-    def check_against_state(state):
-        a_game = Game({}, 0)
-        a_game.map = state["grid"]
-        a_game.cols, a_game.rows = len(a_game.map[0]), len(a_game.map)
-        a_game.has_player = [[None for y in range(a_game.rows)] for x in range(a_game.cols)]
-        for p in state["players"]:
-            a_game.has_player[p["x"]][p["y"]] = True
-        a_game.level_index = state["level"]
-        return a_game.check
-
     async def play(self):
         for p in self.players:
             await p.do_action()
-        if self.gold >= self.level["gold"]:
-            return self.next_level()
         self.steps += 1
-        return not self.level.get("steps") or self.steps < self.level["steps"]
-
-    def next_level(self):
-        self.level_index += 1
-        if self.level_index < len(self.challenge["levels"]):
-            self.load_level()
-            return "new map"
-        return False
 
     def get_map(self):
         return {
@@ -153,61 +82,67 @@ class Game:
         grid = ["".join(row) for row in self.map]
         return grid, players
 
+class LocalGame(BaseGame):
+    def __init__(self, challenge, load=True):
+        super().__init__()
+        self.challenge = challenge
+        self.level_index = 0
+        self.players = []
+        if load: self.load_level()
+        # load challenge bots
+        for bot in (challenge.get("bots") or []):
+            print("load bot: "+bot)
+            try:
+                script = import_module(bot).script
+            except:
+                raise Exception(f"Failed to load bot: {bot}")
+            else:
+                tile = challenge["tiles"][name] if "tiles" in challenge and name in challenge["tiles"] else BOT_TILE
+                self.load_player(LocalPlayer.LocalPlayer(self, bot, tile, script))
 
-class Player:
-    def __init__(self, game, name, tile):
-        self.game = game
-        self.name = name
-        self.tile = tile
-        self.x, self.y = 0, 0
-        self.gold = 0
+    def load_player(self, player):
+        super().load_player(player, *self.level["start"])
 
-    def act(self, cmd):
-        if cmd == PASS: return
-        dx, dy = 0, 0
-        if cmd == TAKE:
-            self.take()
-        elif cmd == UP:
-            dy -= 1
-        elif cmd == DOWN:
-            dy += 1
-        elif cmd == LEFT:
-            dx -= 1
-        elif cmd == RIGHT:
-            dx += 1
-        self.move(dx, dy)
+    def load_level(self):
+        self.level = self.challenge["levels"][self.level_index]
+        name = self.level["map"]
+        if type(name) is str: # map from separate file
+            # TODO: handle map loading error
+            fname = name if name.endswith(".json") else name + ".json"
+            map = json.loads(MAPS_DIR.joinpath(fname))
+            data = map["grid"]
+            self.map_title = map["title"]
+            self.map_tiles = map.get("tiles")
+        else: # map from chal file
+            data = self.challenge["maps"][name]
+            self.map_title = str(name + 1)
+            self.map_tiles = None
 
-    def move(self, dx, dy):
-        if dx or dy:
-            x, y = self.x + dx, self.y + dy
-            game = self.game
-            game.remove_player(self)
-            if not game.check(WALL, x, y) and not game.check(PLAYER, x, y) and ((not game.check(DOOR, x, y)) | self.game.key):
-                self.x, self.y = x, y
-            game.add_player(self, self.x, self.y)
+        self.totalgoldtaken = 0
+        super().load_level(data)
+        for p in self.players:
+            p.newlevel()
+            self.add_player(p, *self.level["start"])
 
-    def take(self):
-        gold = self.game.check(GOLD, self.x, self.y)
-        if gold:
-            self.gold += gold
-            self.game.take_gold(self.x, self.y)
-        key = self.game.check(KEY, self.x, self.y)
-        if key:
-            self.game.key += 1
-            self.game.take_gold(self.x, self.y)
-        portal = self.game.check(PORTAL, self.x, self.y)
-        if portal:
-            portals = [];
-            for i in range(len(self.game.map)):
-                for j in range(len(self.game.map[i])):
-                    if (self.game.map[i][j] == '?') & (not (i == self.x & j == self.y)):
-                        portals.append((j,i));
-            self.x, self.y = random.choice(portals);
+    def take_item(self, x, y):
+        self.totalgoldtaken += self.check("gold", x, y)
+        super().take_item(x,y)
 
-class LocalPlayer(Player):
-    def __init__(self, game, name, tile, script):
-        super().__init__(game, name, tile)
-        self.script = script
+    async def play(self):
+        await super().play()
+        if self.totalgoldtaken >= self.level["gold"]:
+            return self.next_level()
+        return not self.level.get("steps") or self.steps < self.level["steps"]
 
-    async def do_action(self):
-        self.act(self.script(self.game.check, self.x, self.y))
+    def next_level(self):
+        self.level_index += 1
+        if self.level_index < len(self.challenge["levels"]):
+            self.load_level()
+            return "new map"
+        return False
+
+    def get_map(self):
+        return {
+            "map": super().get_map(),
+            "start": self.level["start"]
+        }

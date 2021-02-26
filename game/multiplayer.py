@@ -1,5 +1,6 @@
 import sys
 import os
+import importlib
 import json
 import signal
 import asyncio
@@ -7,7 +8,8 @@ import traceback
 from contextlib import suppress
 from queue import Queue
 from threading import Thread
-from game import Game
+from game import BaseGame
+from Players import Player, LocalPlayer
 from importlib import import_module, reload
 
 sys.path.append(os.path.join(os.path.dirname(__file__),'bots'))
@@ -17,6 +19,7 @@ class Multiplayer:
         self.queue = Queue()
         self.board = board
         self.server = server
+        self.game = BaseGame()
         self.port = port
         self.username = username
         self.loop = loop = asyncio.new_event_loop()
@@ -76,15 +79,25 @@ class Multiplayer:
             elif message.startswith("map"):
                 # server sets current map
                 try:
-                    self.board.load(json.loads(message[4:]))
+                    data = json.loads(message[4:])
+                    print(data)
+                    self.board.load(data["map"])
+                    self.game.load_level(data["map"]["grid"])
+                    self.game.load_player(LocalPlayer.LocalPlayer(self.game, self.bot, "UserBot", self.script), *data["start"])
                     await self.resp("ok")
                 except Exception as e:
-                    print(e)
-                    self.handle_error("Failed to load map")
+                    self.handle_error("Failed to load map:", e)
             elif message.startswith("state"):
                 try:
                     data = json.loads(message[6:])
-                    self.state = data
+                    self.game.map = data["grid"]
+                    self.game.cols, self.game.rows = len(self.game.map[0]), len(self.game.map)
+                    self.game.has_player = [[None for y in range(self.game.rows)] for x in range(self.game.cols)]
+                    self.game.players[0].x = data["x"]
+                    self.game.players[0].y = data["y"]
+                    for p in data["players"]:
+                        self.game.has_player[p["x"]][p["y"]] = True
+                    self.game.level_index = data["level"]
                     self.board.update(data["grid"], data["players"])
                     await self.resp("ok")
                 except Exception as e:
@@ -92,8 +105,7 @@ class Multiplayer:
                     self.handle_error("Failed to update state")
             elif message.startswith("action"):
                 try:
-                    check = Game.check_against_state(self.state)
-                    action = self.script(check, self.state["x"], self.state["y"])
+                    action = self.script(self.game.check, self.game.players[0].x, self.game.players[0].y)
                     await self.resp(json.dumps({"action": action}))
                 except Exception as e:
                     traceback.print_exc()
@@ -120,12 +132,12 @@ class Multiplayer:
         self.queue.put(("error", message))
 
     async def join(self, name):
+        print("join")
         try:
-            if self.bot in sys.modules:
-                 reload(sys.modules[self.bot])
-            self.script = import_module(self.bot).script
+            botmodule = importlib.machinery.SourceFileLoader(self.bot, self.bot);
+            self.script = botmodule.load_module().script
         except:
-            raise Exception(f"Failed to load bot: {bot}")
+            raise Exception(f"Failed to load bot: {self.bot}")
         command = "connect" + (" " + name if not name is None else "")
         self.writer.write(command.encode())
         await self.writer.drain()

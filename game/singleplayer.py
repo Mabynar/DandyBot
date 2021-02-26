@@ -3,7 +3,8 @@ import sys
 import time
 import os
 import asyncio
-from game import Game, LocalPlayer
+from game import LocalGame
+from Players import Player, LocalPlayer
 from importlib import import_module, reload
 
 sys.path.append(os.path.join(os.path.dirname(__file__),'bots'))
@@ -13,7 +14,7 @@ class Singleplayer:
         self.tick_rate = tick_rate
         self.board = board
         board.set_challenge(challenge)
-        self.game = Game(challenge)
+        self.game = LocalGame(challenge)
         # load player bot
         try:
             botmodule = importlib.machinery.SourceFileLoader(user_bot, user_bot);
@@ -21,8 +22,8 @@ class Singleplayer:
         except:
             raise Exception(f"Failed to load player bot")
         else:
-            self.game.load_player(LocalPlayer(self.game, user_bot, user_tile, script))
-        self.board.load(self.game.get_map())
+            self.game.load_player(LocalPlayer.LocalPlayer(self.game, user_bot, user_tile, script))
+        self.board.load(self.game.get_map()["map"])
 
     def start(self, updater):
         self.loop = asyncio.get_event_loop()
@@ -37,7 +38,7 @@ class Singleplayer:
         cont = self.loop.run_until_complete(self.game.play())
         if cont and self.updater:
             if cont == "new map":
-                self.board.load(self.game.get_map())
+                self.board.load(self.game.get_map()["map"])
             map, players = self.game.fetch()
             self.board.update(map, players)
             dt = int((time.time() - t) * 1000)
